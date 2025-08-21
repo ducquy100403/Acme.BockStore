@@ -21,6 +21,8 @@ export class BooksComponent implements OnInit {
   isModalOpen = false;
   bookTypes = bookTypeOptions;
   form!: FormGroup;
+  selectedBook = {} as BookDto; 
+  list: any;
 
   constructor(
     private readonly bookService: BookService,
@@ -39,27 +41,49 @@ export class BooksComponent implements OnInit {
   }
 
   createBook() {
+    this.selectedBook = {} as BookDto;
     this.buildForm();
     this.isModalOpen = true;
   }
 
-  buildForm() {
-    this.form = this.fb.group({
-      name: ['', Validators.required],
-      type: [null, Validators.required],
-      publishDate: [null, Validators.required],
-      price: [null, [Validators.required, Validators.min(1)]],
+   editBook(id: string) {
+    this.bookService.get(id).subscribe((book) => {
+      this.selectedBook = book;
+      this.buildForm();
+      this.isModalOpen = true;
     });
   }
+
+buildForm() {
+  this.form = this.fb.group({
+    name: [this.selectedBook?.name || '', Validators.required],
+    type: [this.selectedBook?.type ?? null, Validators.required],
+    publishDate: [
+      this.selectedBook?.publishDate ? new Date(this.selectedBook.publishDate) : null,
+      Validators.required,
+    ],
+    price: [this.selectedBook?.price ?? null, Validators.required],
+  });
+}
+
 
   save() {
-    if (this.form.invalid) return;
+  if (this.form.invalid) return;
 
-    const input = this.form.value as CreateUpdateBookDto;
-    this.bookService.create(input).subscribe(() => {
-      this.isModalOpen = false;
-      this.form.reset();
-      this.loadBooks(); // refresh list sau khi thêm
-    });
-  }
+  const dto: CreateUpdateBookDto = {
+    ...this.form.value,
+    publishDate: (this.form.value.publishDate as Date)?.toISOString(),
+  };
+
+  const request = this.selectedBook?.id
+    ? this.bookService.update(this.selectedBook.id, dto)
+    : this.bookService.create(dto);
+
+  request.subscribe(() => {
+    this.isModalOpen = false;
+    this.form.reset();
+    this.loadBooks(); // reload lại danh sách
+  });
+}
+
 }
