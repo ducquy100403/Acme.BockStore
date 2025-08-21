@@ -2,14 +2,20 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { BookService, BookDto, bookTypeOptions, CreateUpdateBookDto } from '@proxy/books';
 import { SharedModule } from "../shared/shared.module";
-import { ThemeSharedModule } from '@abp/ng.theme.shared';
+import { ThemeSharedModule, ConfirmationService, Confirmation } from '@abp/ng.theme.shared';
 import { FormGroup, FormBuilder, Validators, ReactiveFormsModule } from '@angular/forms';
 import { NgbDatepickerModule, NgbDateNativeAdapter, NgbDateAdapter } from '@ng-bootstrap/ng-bootstrap';
 
 @Component({
   selector: 'app-books',
   standalone: true,
-  imports: [CommonModule, SharedModule, ThemeSharedModule, NgbDatepickerModule, ReactiveFormsModule],
+  imports: [
+    CommonModule,
+    SharedModule,
+    ThemeSharedModule,
+    NgbDatepickerModule,
+    ReactiveFormsModule,
+  ],
   templateUrl: './books.component.html',
   styleUrls: ['./books.component.scss'],
   providers: [
@@ -17,16 +23,17 @@ import { NgbDatepickerModule, NgbDateNativeAdapter, NgbDateAdapter } from '@ng-b
   ],
 })
 export class BooksComponent implements OnInit {
+
   books: BookDto[] = [];
   isModalOpen = false;
   bookTypes = bookTypeOptions;
   form!: FormGroup;
-  selectedBook = {} as BookDto; 
-  list: any;
+  selectedBook = {} as BookDto;
 
   constructor(
     private readonly bookService: BookService,
-    private fb: FormBuilder
+    private fb: FormBuilder,
+    private confirmation: ConfirmationService // ✅ thêm vào
   ) {}
 
   ngOnInit() {
@@ -35,7 +42,7 @@ export class BooksComponent implements OnInit {
 
   loadBooks() {
     this.bookService.getList().subscribe(response => {
-      // Nếu backend trả về PagedResultDto thì sửa lại response.items
+      // Nếu backend trả về PagedResultDto thì lấy response.items
       this.books = (response as any).items ?? response;
     });
   }
@@ -46,7 +53,7 @@ export class BooksComponent implements OnInit {
     this.isModalOpen = true;
   }
 
-   editBook(id: string) {
+  editBook(id: string) {
     this.bookService.get(id).subscribe((book) => {
       this.selectedBook = book;
       this.buildForm();
@@ -54,36 +61,46 @@ export class BooksComponent implements OnInit {
     });
   }
 
-buildForm() {
-  this.form = this.fb.group({
-    name: [this.selectedBook?.name || '', Validators.required],
-    type: [this.selectedBook?.type ?? null, Validators.required],
-    publishDate: [
-      this.selectedBook?.publishDate ? new Date(this.selectedBook.publishDate) : null,
-      Validators.required,
-    ],
-    price: [this.selectedBook?.price ?? null, Validators.required],
-  });
-}
-
+  buildForm() {
+    this.form = this.fb.group({
+      name: [this.selectedBook?.name || '', Validators.required],
+      type: [this.selectedBook?.type ?? null, Validators.required],
+      publishDate: [
+        this.selectedBook?.publishDate ? new Date(this.selectedBook.publishDate) : null,
+        Validators.required,
+      ],
+      price: [this.selectedBook?.price ?? null, Validators.required],
+    });
+  }
 
   save() {
-  if (this.form.invalid) return;
+    if (this.form.invalid) return;
 
-  const dto: CreateUpdateBookDto = {
-    ...this.form.value,
-    publishDate: (this.form.value.publishDate as Date)?.toISOString(),
-  };
+    const dto: CreateUpdateBookDto = {
+      ...this.form.value,
+      publishDate: (this.form.value.publishDate as Date)?.toISOString(),
+    };
 
-  const request = this.selectedBook?.id
-    ? this.bookService.update(this.selectedBook.id, dto)
-    : this.bookService.create(dto);
+    const request = this.selectedBook?.id
+      ? this.bookService.update(this.selectedBook.id, dto)
+      : this.bookService.create(dto);
 
-  request.subscribe(() => {
-    this.isModalOpen = false;
-    this.form.reset();
-    this.loadBooks(); // reload lại danh sách
-  });
-}
+    request.subscribe(() => {
+      this.isModalOpen = false;
+      this.form.reset();
+      this.loadBooks(); // reload lại list
+    });
+  }
 
+  // ✅ Xóa sách với confirm
+  delete(id: string) {
+    this.confirmation.warn('::AreYouSureToDelete', '::AreYouSure')
+      .subscribe((status) => {
+        if (status === Confirmation.Status.confirm) {
+          this.bookService.delete(id).subscribe(() => {
+            this.loadBooks();
+          });
+        }
+      });
+  }
 }
